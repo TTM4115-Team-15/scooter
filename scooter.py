@@ -1,24 +1,23 @@
 import json
-import paho.mqtt.client as mqtt
-
-from stmpy import Machine, Driver
+from stmpy import Machine, Driver # type: ignore
+from hardware import Hardware # Replace the next line with this to simulate
+# from breathalyzer import Breathalyzer as Hardware
 from mqtt_client import MQTT_Client
-# from hardware import Hardware
-# from breathalayzer import breathalayzer, lock, unlock
 
-##
 class Scooter:
-	def __init__(self, mqtt_client, id, pos = [63.4177, 10.4921809]):
+	'''Implements the statemachine for the scooter'''
+
+	def __init__(self, mqtt_client : MQTT_Client, id : int, pos = [63.4177, 10.4921809], debug = True):
 		self.driver = None
 		self.id = id
 		self.pos = pos
+		self.debug = debug
 
-		# TODO: Make static
-		# self.hardware = Hardware(self.get_driver())
+		self.hardware = Hardware()
 
 		# Consider making this null to couple at same time as stm_driver
 		self.mqtt_client = mqtt_client
-		self.mqtt_client.stm_driver = self.get_driver() # TODO: Clean up circular dependencies
+		self.mqtt_client.stm_driver = self.get_driver() # TODO: Clean up circular references
 
 	def on_enter_available(self):
 		self.mqtt_client.client.subscribe("available")
@@ -34,52 +33,43 @@ class Scooter:
 			"status": 0 # Reserved (ACK)
 		}))
 		self.log(f"Reserving for {user_id}")
-		# bac_level = self.hardware.breathalayzer()
-		bac_level = breathalayzer()
-		print("BAC Reading: ", bac_level)
-		
+
+		bac_level = self.hardware.run_bac_test(limit = 0.2)
+		self.log(f"BAC test: {"passed" if bac_level else "failed"}")
+
 		if(bac_level):
-			self.get_driver().send("BAC_success", "scooter")
-			unlock()
+			self.driver.send("BAC_success", "scooter")
 		else:
-			self.get_driver().send("BAC_fail", "scooter")
-			lock()
-		
-	def on_exit_reserved(self):
-		# debug - Dette skal komme fra breathalyzer
-		# self.mqtt_client.client.unsubscribe("BAC_fail")
-		# self.mqtt_client.client.unsubscribe("BAC_success")
-		pass
+			self.driver.send("BAC_fail", "scooter")
+			self.hardware.display_failure()
 
 	def on_enter_riding(self):
-		# self.hardware.unlock() # TODO: Fix name/role
-		# unlock()
-		pass
+		self.hardware.unlock()
+		self.hardware.display_success()
 
 	def on_exit_riding(self):
-		# self.hardware.lock()
-		lock()
+		self.hardware.lock()
+		self.hardware.display_success()
 		self.mqtt_client.client.publish(f"lock/{self.id}/res", json.dumps({"status":"gucci"}))
 
 	def geo_check_distance(self, user_id, loc):
 		x, y = loc[0], loc[1]
-		self.log(f"Checking distance: {self.pos} to [{x}, {y}]")
-
 		maxDistance = 75
 		distanceSqrMag = (self.pos[0] - x)**2 + (self.pos[1] - y)**2
-		self.log(f"Distance is {distanceSqrMag**(1/2)}")
 
 		if(distanceSqrMag < maxDistance**2):
-			self.log("Scooter is close enough!")
+			self.log(f"Scooter is close enough ({distanceSqrMag**(1/2)})")
 			payload = json.dumps({ "s_id":self.id, "loc":self.pos })
 			self.mqtt_client.client.publish(f"available/{user_id}/res", payload)
 		else:
 			self.log("Scooter is too far away :(")
+			self.log(f"{distanceSqrMag**(1/2)} / {maxDistance}")
 
 		return "available"
 
 	def log(self, msg):
-		print(f"[Scooter {self.id}] {msg}")
+		if (self.debug):
+			print(f"[Scooter {self.id}] {msg}")
 
 	def send_bac(self, success):
 		self.log(f"BAC Status: {success}")
@@ -115,74 +105,3 @@ class Scooter:
 		self.driver = driver
 
 		return self.driver
-
-
-import RPi.GPIO as GPIO
-from time import sleep
-
-# name pins
-clock = 11
-miso = 5
-cs = 8
-green_light = 6
-red_light = 19
-
-# class Breathalayzer:
-#     def __init__():
-    # set up pins
-GPIO.setmode(GPIO.BCM)
-
-GPIO.setup(11, GPIO.OUT)
-GPIO.setup(5,GPIO.IN)
-GPIO.setup(8,GPIO.OUT)
-GPIO.setup(6,GPIO.OUT)
-GPIO.setup(19,GPIO.OUT)
-
-# bring clock and cs high
-GPIO.output(clock,True)
-GPIO.output(cs,True)
-
-# begin loop to print a stream of data
-def breathalayzer():
-    readings = []
-
-    print("Starting breathalyzer measurement for 10 seconds at 100 samples/sec...")
-    for _ in range(1000):  # 1000 readings over 10 seconds
-        GPIO.output(cs, False)
-
-        voltage_bits = ""
-
-        for i in range(15):
-            GPIO.output(clock, False)
-            voltage_bits += "1" if GPIO.input(miso) else "0"
-            GPIO.output(clock, True)
-
-        voltage_bits = voltage_bits.strip()[2:14]
-        voltage = int(voltage_bits, 2) * (5 / 2048)
-
-        # Estimate promille from voltage
-        promille = (voltage - 0.4) * (2.0 / 3.0)  # Simple linear map
-        promille = max(promille, 0.0)  # No negative promille
-
-        readings.append(promille)
-
-        GPIO.output(cs, True)
-        sleep(0.01)  # 0.01 sec = 100 Hz
-
-    avg_promille = sum(readings) / len(readings)
-    print(f"Average Promille over 10 seconds: {avg_promille:.3f}")
-    if avg_promille > 0.2:
-        return False
-        
-    if avg_promille < 0.2:
-        return True
-    
-def unlock():
-    GPIO.output(green_light, True)
-    sleep(4)
-    GPIO.output(green_light, False)
-    
-def lock():
-    GPIO.output(red_light, True)
-    sleep(4)
-    GPIO.output(red_light, False)

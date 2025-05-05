@@ -36,27 +36,28 @@ class MQTT_Client:
 		msg_type = msg.topic.split("/")[0]
 		
 		kwargs = {}
-		if(msg_type == "available"):
-			payload = json.loads(msg.payload.decode("utf-8"))
-			try:
-				kwargs = { 
+		try:
+			if(msg_type == "available"):
+				payload = msg.payload.decode("utf-8")
+				payload = json.loads(payload)
+				kwargs = {
 					'user_id':payload["user_id"],
 					'loc':payload["loc"]
 				}
-			except:
-				print("Noe er feil") 
-
-		if(msg_type == "unlock"):
-			payload = msg.payload.decode("utf-8")
-			payload = json.loads(payload)
-			kwargs = {
-				'user_id':payload["user_id"]
-			}
+			elif(msg_type == "unlock"):
+				payload = msg.payload.decode("utf-8")
+				payload = json.loads(payload)
+				kwargs = {
+					'user_id':payload["user_id"]
+				}
+		except:
+			print(f"Could not decode message of type '{msg_type}'")
+			return
 
 		self.stm_driver.send(msg_type, "scooter", kwargs=kwargs)
 
 	def start(self, broker, port):
-		print("Connecting to {}:{}".format(broker, port))
+		print(f"Connecting to {broker}:{port}")
 		self.client.connect(broker, port)
 
 		try:

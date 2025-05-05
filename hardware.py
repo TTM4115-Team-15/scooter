@@ -1,70 +1,28 @@
-from sense_hat import SenseHat
-import time
+from time import sleep
 
-# CONSTANT VALUES #
-r = [255,0,0]
-g = [0,255,0]
-b = [0,0,0]
-
-red_cross = [
-	r, b, b, b, b, b, b, r,
-	b, r, b, b, b, b, r, b,
-	b, b, r, b, b, r, b, b,
-	b, b, b, r, r, b, b, b,
-	b, b, b, r, r, b, b, b,
-	b, b, r, b, b, r, b, b,
-	b, r, b, b, b, b, r, b,
-	r, b, b, b, b, b, b, r
-]
-
-green_check = [
-	b, b, b, b, b, b, b, b,
-	b, b, b, b, b, b, b, b,
-	b, b, b, b, b, b, b, g,
-	b, b, b, b, b, b, g, b,
-	b, g, b, b, b, g, b, b,
-	b, b, g, b, g, b, b, b,
-	b, b, b, g, b, b, b, b,
-	b, b, b, b, b, b, b, b
-]
-
-class Hardware:
-	'''This class contains all the hardware interactions with the Scooter'''
-
-	def __init__(self, driver):
-		self.sense = SenseHat()
-		self.driver = driver
-
-	def trigger(self, signal):
-		self.driver.send(signal, "scooter")
+class Hardware():
+	'''
+	Base class for all hardware interactions with the raspberry pi (or sim).
+	Each hardware configuration has its own implementation of this class.
+	'''
+	def __init__(self):
+		# Not used in production
+		self.simulated_res = False
+	
+	def run_bac_test(self, limit = 0.2):
+		'''Determine if the BAC level is too high'''
+		self.simulated_res = not self.simulated_res
+		sleep(2)
+		return self.simulated_res
+	
+	def lock(self):
+		print("Scooter locked")
 
 	def unlock(self):
-		self.sense.set_pixels(green_check)
-		time.sleep(2)
-		self.clear()
-		
-	def lock(self):
-		self.sense.set_pixels(red_cross)
-		time.sleep(2)
-		self.clear()
+		print("Scooter unlocked")
 
-	def clear(self):
-		self.sense.clear((0, 0, 0))
+	def display_success(self):
+		print("Success")
 
-	def breathalayzer(self):
-		while True:
-			for event in self.sense.stick.get_events():
-				# Check if the joystick was pressed
-				if event.direction == "up":
-					self.trigger("BAC_success")
-					return True
-				if event.direction == "down":
-					self.trigger("BAC_fail")
-					self.lock() # TODO: Move
-					return False
-
-	# def unlock_scoot(self):
-	# 	if self.breathalayzer() == True:
-	# 		self.unlock()
-	# 	else:
-	# 		self.lock()
+	def display_failure(self):
+		print("Fail")
