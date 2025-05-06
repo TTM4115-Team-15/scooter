@@ -14,4 +14,4 @@ RUN python3 -m venv /venv \
  && pip install --no-cache-dir -r requirements.txt
 
 # Entrypoint is main.py
-CMD ["/venv/bin/python", "main"]
+CMD ["/venv/bin/python", "-u", "main.py"]
