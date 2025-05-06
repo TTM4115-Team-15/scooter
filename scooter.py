@@ -1,6 +1,6 @@
 import json
 from stmpy import Machine, Driver # type: ignore
-from hardware import Hardware # Replace the next line with this to simulate
+from hardware import Hardware # Replace this with the next line in production
 # from breathalyzer import Breathalyzer as Hardware
 from mqtt_client import MQTT_Client
 
