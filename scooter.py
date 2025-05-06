@@ -19,6 +19,10 @@ class Scooter:
 		self.mqtt_client = mqtt_client
 		self.mqtt_client.stm_driver = self.get_driver() # TODO: Clean up circular references
 
+	###############
+	# Transitions #
+	###############
+
 	def on_enter_available(self):
 		self.mqtt_client.client.subscribe("available")
 		self.mqtt_client.client.publish("debug", f"[Scooter {self.id}] is now available")
@@ -30,9 +34,9 @@ class Scooter:
 	def on_enter_reserved(self, user_id):
 		self.mqtt_client.client.publish(f"unlock/{self.id}/res", json.dumps({
 			"user_id": user_id,
-			"status": 0 # Reserved (ACK)
+			"status": 0 # ACK reservation
 		}))
-		self.log(f"Reserving for {user_id}")
+		self.log(f"Reserved for user {user_id}")
 
 		bac_level = self.hardware.run_bac_test(limit = 0.2)
 		self.log(f"BAC test: {"passed" if bac_level else "failed"}")
@@ -52,6 +56,10 @@ class Scooter:
 		self.hardware.display_success()
 		self.mqtt_client.client.publish(f"lock/{self.id}/res", json.dumps({"status":"gucci"}))
 
+	#####################
+	# Private Functions #
+	#####################
+
 	def geo_check_distance(self, user_id, loc):
 		x, y = loc[0], loc[1]
 		maxDistance = 75
@@ -67,20 +75,20 @@ class Scooter:
 
 		return "available"
 
+	def send_bac(self, success):
+		self.log(f"Sending BAC result: {success}")
+		self.mqtt_client.client.publish(f"unlock/{self.id}/res", json.dumps({
+			# 0 = ACK reservation, 1 = success, 2 = fail
+			"status": 1 if success else 2
+		}))
+
 	def log(self, msg):
 		if (self.debug):
 			print(f"[Scooter {self.id}] {msg}")
 
-	def send_bac(self, success):
-		self.log(f"BAC Status: {success}")
-		self.mqtt_client.client.publish(f"unlock/{self.id}/res", json.dumps({
-			# 1 = success, 2 = fail
-			"status": 1 if success else 2
-		}))
-
-	#######
-	# API #
-	#######
+	##########
+	# Driver #
+	##########
 	def get_driver(self):
 		if self.driver:
 			return self.driver
